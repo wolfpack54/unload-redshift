@@ -1,0 +1,76 @@
+CREATE OR REPLACE PROCEDURE unload_schema_to_s3(
+    target_schema VARCHAR(100), 
+    s3_location VARCHAR(10000),
+    iam_role VARCHAR(100),
+    delimiter VARCHAR(10) DEFAULT '|'
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    table_name RECORD;
+    unload_query TEXT;
+    unload_id INT;
+    unload_time TIMESTAMP;
+    un_year INT;
+    un_month INT;
+    un_day INT;
+    start_time TIMESTAMP;
+    end_time TIMESTAMP;
+BEGIN
+    -- Extract current date components
+    SELECT EXTRACT(YEAR FROM current_timestamp),
+           EXTRACT(MONTH FROM current_timestamp),
+           EXTRACT(DAY FROM current_timestamp)
+    INTO un_year, un_month, un_day;
+
+    -- Generate unique unload ID
+    SELECT COALESCE(MAX(u_id), 0) + 1 INTO unload_id FROM unload_history;
+
+    -- Record unload timestamp
+    SELECT current_timestamp INTO unload_time;
+
+    -- Loop through all tables in the schema
+    FOR table_name IN
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = target_schema
+          AND table_type = 'BASE TABLE'
+    LOOP
+        -- Record start time
+        SELECT current_timestamp INTO start_time;
+
+        -- Build UNLOAD query
+        unload_query := FORMAT(
+            $$UNLOAD ('SELECT * FROM %I.%I')
+            TO '%s/%s/%s/%s/%s/%s/%s_'
+            IAM_ROLE '%s'
+            DELIMITER '%s'
+            MAXFILESIZE 300 MB
+            PARALLEL ADDQUOTES HEADER GZIP$$,
+            target_schema, table_name.table_name,
+            s3_location, un_year, un_month, un_day, target_schema, table_name.table_name, table_name.table_name,
+            iam_role, delimiter
+        );
+
+        -- Execute UNLOAD query
+        BEGIN
+            EXECUTE unload_query;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE WARNING 'UNLOAD failed for table %%, skipping...', table_name.table_name;
+            CONTINUE;
+        END;
+
+        -- Record end time
+        SELECT current_timestamp INTO end_time;
+
+        -- Log details into unload_history table
+        INSERT INTO unload_history (
+            u_id, u_timestamp, start_time, end_time, db_name, table_schema, table_name, export_query
+        ) VALUES (
+            unload_id, unload_time, start_time, end_time, current_database(), target_schema, table_name.table_name, unload_query
+        );
+    END LOOP;
+
+    RAISE INFO 'Unloading schema [%] to S3 completed successfully.', target_schema;
+END;
+$$;
