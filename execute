@@ -1,0 +1,6 @@
+CALL unload_schema_to_s3(
+    'my_schema',
+    's3://my-bucket/unloads',
+    'arn:aws:iam::123123123:role/my-redshift-role',
+    '|'
+);
