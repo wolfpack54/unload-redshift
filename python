@@ -1,0 +1,43 @@
+import psycopg2
+
+# Redshift connection details
+conn = psycopg2.connect(
+    dbname="your_db",
+    user="your_user",
+    password="your_password",
+    host="your_redshift_endpoint",
+    port="5439"
+)
+
+# Define schema, S3 bucket, and IAM role
+schema_name = "your_schema_name"
+s3_bucket = "s3://your-bucket-name/exports/"
+iam_role = "arn:aws:iam::your_account_id:role/your_redshift_role"
+
+# Fetch table names
+cursor = conn.cursor()
+query = f"""
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = '{schema_name}'
+  AND table_type = 'BASE TABLE';
+"""
+cursor.execute(query)
+tables = cursor.fetchall()
+
+# Generate and execute UNLOAD commands for each table
+for table in tables:
+    table_name = table[0]
+    unload_query = f"""
+    UNLOAD ('SELECT * FROM {schema_name}.{table_name}')
+    TO '{s3_bucket}{table_name}_'
+    CREDENTIALS 'aws_iam_role={iam_role}'
+    DELIMITER ',' ADDQUOTES ALLOWOVERWRITE;
+    """
+    print(f"Unloading {table_name} to S3...")
+    cursor.execute(unload_query)
+
+conn.commit()
+cursor.close()
+conn.close()
+print("Unload process completed for all tables!")
