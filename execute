@@ -4,3 +4,28 @@ CALL unload_schema_to_s3(
     'arn:aws:iam::123123123:role/my-redshift-role',
     '|'
 );
+
+
+
+import psycopg2
+
+conn = psycopg2.connect(
+    dbname="your_db", 
+    user="your_user", 
+    password="your_password", 
+    host="your_redshift_endpoint"
+)
+cursor = conn.cursor()
+
+tables = ["table1", "table2"]
+for table in tables:
+    query = f"""
+    UNLOAD ('SELECT * FROM schema_name.{table}')
+    TO 's3://your-bucket-name/exports/{table}_'
+    CREDENTIALS 'aws_iam_role=your-iam-role-arn'
+    DELIMITER ',' ADDQUOTES ALLOWOVERWRITE;
+    """
+    cursor.execute(query)
+
+conn.commit()
+conn.close()
