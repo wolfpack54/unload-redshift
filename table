@@ -1,0 +1,10 @@
+CREATE TABLE unload_history (
+    u_id INT,
+    u_timestamp TIMESTAMP,
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    db_name VARCHAR(100),
+    table_schema VARCHAR(100),
+    table_name VARCHAR(100),
+    export_query TEXT
+);
