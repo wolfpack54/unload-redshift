@@ -1,0 +1,27 @@
+import psycopg2
+import os
+
+def lambda_handler(event, context):
+    conn = psycopg2.connect(
+        dbname="your_db_name",
+        user="your_username",
+        password="your_password",
+        host="your_redshift_cluster_endpoint",
+        port=5439
+    )
+    cursor = conn.cursor()
+    query = """
+    UNLOAD ('SELECT * FROM your_table')
+    TO 's3://your-bucket-name/unload-folder-prefix/'
+    CREDENTIALS 'aws_iam_role=arn:aws:iam::your_account_id:role/YourRedshiftRole'
+    DELIMITER ','
+    ADDQUOTES
+    ALLOWOVERWRITE
+    PARALLEL OFF
+    HEADER;
+    """
+    cursor.execute(query)
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return {"status": "Success"}
