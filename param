@@ -1,0 +1,31 @@
+resource "aws_redshift_parameter_group" "redshift" {
+  name   = "caprx-stage-param-group"
+  family = "redshift-1.0"
+
+  parameter {
+    name  = "wlm_json_configuration"
+    value = jsonencode([
+      {
+        concurrency_scaling = "auto"
+        name                = "Default queue"
+        query_concurrency   = 0
+        query_group         = []
+        rules               = []
+        user_group          = []
+        user_role           = []
+      },
+      {
+        auto_wlm            = true
+        concurrency_scaling = "auto"
+        name                = "Default queue"
+        priority            = "highest"
+        query_group         = []
+        user_group          = []
+        user_role           = []
+      },
+      {
+        short_query_queue = true
+      }
+    ])
+  }
+}
