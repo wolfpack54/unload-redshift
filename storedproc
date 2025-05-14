@@ -1,0 +1,44 @@
+CREATE OR REPLACE PROCEDURE reporting.generate_daily_claim_summary(IN run_date DATE)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    start_ts_utc TIMESTAMP;
+    end_ts_utc TIMESTAMP;
+    claim_count INT;
+    reversal_count INT;
+BEGIN
+    -- Convert run_date (Central Time) to UTC window
+    start_ts_utc := run_date + INTERVAL '5 hour';
+    end_ts_utc := run_date + INTERVAL '1 day' + INTERVAL '5 hour';
+
+    -- Count total claims received during the window
+    SELECT COUNT(*) INTO claim_count
+    FROM shared_schema.claims
+    WHERE claim_received_ts >= start_ts_utc
+      AND claim_received_ts < end_ts_utc;
+
+    -- Count reversals (assuming 'claim_type' = 'REVERSAL' for example purposes)
+    SELECT COUNT(*) INTO reversal_count
+    FROM shared_schema.claims
+    WHERE claim_received_ts >= start_ts_utc
+      AND claim_received_ts < end_ts_utc
+      AND claim_type = 'REVERSAL';
+
+    -- Insert summary into local reporting table
+    INSERT INTO reporting.claim_summary (
+        summary_date,
+        claims_count,
+        reversal_count,
+        created_ts
+    )
+    VALUES (
+        run_date,
+        claim_count,
+        reversal_count,
+        GETDATE()
+    );
+
+    RAISE NOTICE 'Summary generated for %: % claims, % reversals', run_date, claim_count, reversal_count;
+
+END;
+$$;
