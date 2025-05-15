@@ -1,0 +1,42 @@
+CREATE OR REPLACE PROCEDURE sp_daily_claim_summary(p_date DATE)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+
+  -- Create target table if it doesn't exist
+  CREATE TABLE IF NOT EXISTS daily_client_claim_summary (
+    summary_date DATE,
+    client_id VARCHAR(50),
+    claim_count INT,
+    pharmacy_due NUMERIC(18,2),
+    client_billing NUMERIC(18,2)
+  );
+
+  -- Clean existing data for the same day
+  DELETE FROM daily_client_claim_summary
+  WHERE summary_date = p_date;
+
+  -- Insert aggregated data
+  INSERT INTO daily_client_claim_summary (
+    summary_date,
+    client_id,
+    claim_count,
+    pharmacy_due,
+    client_billing
+  )
+  SELECT
+    p_date,
+    client_id,
+    COUNT(*) AS claim_count,
+    SUM(COALESCE(CAST(total_amount_paid AS NUMERIC(18,2)), 0)) AS pharmacy_due,
+    SUM(COALESCE(CAST(pay_amount_level_1 AS NUMERIC(18,2)), 0)) AS client_billing
+  FROM
+    judi_base_view.adjudication_claim
+  WHERE
+    claim_submission_date >= p_date
+    AND claim_submission_date < p_date + INTERVAL '1 day'
+  GROUP BY
+    client_id;
+
+END;
+$$;
