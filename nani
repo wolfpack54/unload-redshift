@@ -1,0 +1,4 @@
+SELECT table_schema, table_name, column_name, ordinal_position, data_type
+FROM information_schema.columns
+WHERE table_schema = 'shared_schema'  -- Replace with actual schema name
+ORDER BY table_schema, table_name, ordinal_position;
