@@ -50,3 +50,11 @@ BEGIN
     WHERE p.column_name IS NULL;
 END;
 $$ LANGUAGE plpgsql;
+
+
+
+
+CREATE EVENT my_schema_change_checker
+ON SCHEDULE EVERY 1 HOUR
+DO
+CALL capture_schema_changes();
