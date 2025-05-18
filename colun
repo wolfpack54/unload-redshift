@@ -1,0 +1,52 @@
+CREATE TABLE IF NOT EXISTS schema_snapshots (
+    snapshot_time TIMESTAMP DEFAULT GETDATE(),
+    schema_name VARCHAR,
+    table_name VARCHAR,
+    column_name VARCHAR,
+    data_type VARCHAR
+);
+
+
+
+
+CREATE TABLE IF NOT EXISTS column_change_alerts (
+    alert_time TIMESTAMP DEFAULT GETDATE(),
+    schema_name VARCHAR,
+    table_name VARCHAR,
+    column_name VARCHAR
+);
+
+
+
+CREATE OR REPLACE PROCEDURE capture_schema_changes()
+AS $$
+BEGIN
+    -- Insert current snapshot
+    INSERT INTO schema_snapshots (snapshot_time, schema_name, table_name, column_name, data_type)
+    SELECT GETDATE(), table_schema, table_name, column_name, data_type
+    FROM svv_columns
+    WHERE table_schema NOT IN ('pg_catalog', 'information_schema');
+
+    -- Insert new columns into alert table
+    INSERT INTO column_change_alerts (alert_time, schema_name, table_name, column_name)
+    WITH latest AS (
+        SELECT *
+        FROM schema_snapshots
+        WHERE snapshot_time = (SELECT MAX(snapshot_time) FROM schema_snapshots)
+    ),
+    previous AS (
+        SELECT *
+        FROM schema_snapshots
+        WHERE snapshot_time = (
+            SELECT MAX(snapshot_time)
+            FROM schema_snapshots
+            WHERE snapshot_time < (SELECT MAX(snapshot_time) FROM schema_snapshots)
+        )
+    )
+    SELECT GETDATE(), l.schema_name, l.table_name, l.column_name
+    FROM latest l
+    LEFT JOIN previous p
+    ON l.schema_name = p.schema_name AND l.table_name = p.table_name AND l.column_name = p.column_name
+    WHERE p.column_name IS NULL;
+END;
+$$ LANGUAGE plpgsql;
