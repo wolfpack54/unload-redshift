@@ -1,0 +1,52 @@
+CREATE OR REPLACE PROCEDURE sp_claim_summary_by_window(
+  start_ts TIMESTAMP,
+  end_ts TIMESTAMP
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+
+  -- Create the table if it doesn’t exist
+  CREATE TABLE IF NOT EXISTS daily_client_claim_summary (
+    summary_utc_start TIMESTAMP,
+    summary_utc_end TIMESTAMP,
+    summary_central_date DATE,
+    client_id VARCHAR(50),
+    claim_count INT,
+    pharmacy_due NUMERIC(18,2),
+    client_billing NUMERIC(18,2)
+  );
+
+  -- Delete existing records for this window
+  DELETE FROM daily_client_claim_summary
+  WHERE summary_utc_start = start_ts
+    AND summary_utc_end = end_ts;
+
+  -- Insert aggregated data for the window
+  INSERT INTO daily_client_claim_summary (
+    summary_utc_start,
+    summary_utc_end,
+    summary_central_date,
+    client_id,
+    claim_count,
+    pharmacy_due,
+    client_billing
+  )
+  SELECT
+    start_ts,
+    end_ts,
+    (start_ts AT TIME ZONE 'UTC' AT TIME ZONE 'America/Chicago')::DATE AS summary_central_date,
+    client_id,
+    COUNT(*) AS claim_count,
+    SUM(COALESCE(CAST(total_amount_paid AS NUMERIC(18,2)), 0)) AS pharmacy_due,
+    SUM(COALESCE(CAST(pay_amount_level_1 AS NUMERIC(18,2)), 0)) AS client_billing
+  FROM
+    judi_base_view.adjudication_claim
+  WHERE
+    claim_submission_date >= start_ts
+    AND claim_submission_date < end_ts
+  GROUP BY
+    client_id;
+
+END;
+$$;
